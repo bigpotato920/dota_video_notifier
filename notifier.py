@@ -2,7 +2,8 @@ import urllib2
 import re
 import gzip
 import StringIO
-from datetime import date
+import datetime
+import time
 import smtplib
 from email.mime.text import MIMEText
 
@@ -12,9 +13,9 @@ class Crawler:
 
 		self.url = url
 		self.dict = {}
-
+		self.announced = []
 		self.read_config(filename)
-
+		self.tomorrow = self.get_tomorrow_str()
 	
 	def read_config(self, filename):
 		"""
@@ -93,11 +94,17 @@ class Crawler:
 		"""
 		Check whether the content of the webpage is an update
 		"""
-		today = self.get_date_str()
+		today = self.get_today_str()
+		if today > self.tomorrow:
+			self.announced.clear()
+			self.tomorrow = self.get_tomorrow_str()
+
+		print today
 		msg = ''
 		for (title, date) in self.dict.items():
-			if date == today:
+			if date == today[:10] and title not in self.announced:
 				msg += title + '\n'
+				self.announced.append(title)
 				
 		print msg
 		self.notify(msg)		
@@ -105,37 +112,52 @@ class Crawler:
 				
 	def notify(self, msg):
 		"""
-		Notify the registered user there is an update through email
+		Notify the registered user if there is an update through email
 
 		Args:
 			msg (str): Message to send to the target user
 		"""
-		self.email.send_email(self.user, self.pwd, msg, self.target)
+
+		if len(msg) > 0:
+			self.email.send_email(self.user, self.pwd, msg, self.target)
+		else:
+			print 'no update'
   
 	
-	def get_date_str(self):
+	def get_today_str(self):
 		"""
-		Get the date string of today for example: 2014/12/05
+		Get the date string of today for example: 2014/12/05-10:32:56
 
 		Returns:
-			str: Date string of today following the format: %Y/%m/%d
+			str: Date string of today following the format: %Y/%m/%d-%H:%M:%S
 		"""
-		today = date.today()
-		return today.strftime("%Y/%m/%d")
+		today = datetime.datetime.today()
+		return today.strftime("%Y/%m/%d-%H:%M:%S")
 
+	def get_tomorrow_str(self):
+		"""
+		Get the date string of tomorrow 00:00:00
+
+		Returns:
+			str: Date string of tomorrow following the format: %Y/%m/%d-%H:%M:%S,
+			for example 2014/01/21-00:00::00
+		"""
+
+		t = datetime.datetime.replace(datetime.datetime.now() + datetime.timedelta(days=1), hour=0, minute=0,second=0)
+		return t.strftime("%Y/%m/%d-%H:%M:%S")
 
 	def start(self):
 		"""
 		Start the service of the program
 		"""
 		self.email = Email()
-		content = self.get_page(self.url)
-		self.build_dict(content)
-		self.check_update()
 
+		while True:
+			content = self.get_page(self.url)
+			self.build_dict(content)
+			self.check_update()
+			time.sleep(60*30)
 
-
-		   		
 
 class Email():
 
@@ -168,4 +190,3 @@ filename = "config.txt"
 
 crawler = Crawler(target_url, filename)
 crawler.start()
-
